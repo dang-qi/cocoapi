@@ -189,6 +189,12 @@ class COCOeval:
         print('Per image evaluation DONE (t={:0.2f}s).'.format(toc-tic))
 
     def computeIoU(self, imgId, catId):
+        """
+        Returns ious - [D x G] array of IoU values for all pairs of detections and gt instances.
+        Where D is the number of detections and G is the number of gt intances.
+        Detections are sortred from the highest to lowest score before computing `ious`.
+        So rows in `ious` are ordered according to detection scores.
+        """
         p = self.params
         if p.useCats:
             gt = self._gts[imgId,catId]
@@ -291,16 +297,17 @@ class COCOeval:
         dt = [dt[i] for i in dtind[0:maxDet]]
         iscrowd = [int(o['iscrowd']) for o in gt]
         # load computed ious
+        # row indices already correspond to the detections sorted by score (highest score first), cf. computeIoU().
         ious = self.ious[imgId, catId][:, gtind] if len(self.ious[imgId, catId]) > 0 else self.ious[imgId, catId]
 
         T = len(p.iouThrs)
         G = len(gt)
         D = len(dt)
-        gtm  = np.zeros((T,G))
-        dtm  = np.zeros((T,D))
+        gtm  = np.ones((T,G)) * -1
+        dtm  = np.ones((T,D)) * -1
         gtIg = np.array([g['_ignore'] for g in gt])
         dtIg = np.zeros((T,D))
-        if not len(ious)==0:
+        if len(ious):
             for tind, t in enumerate(p.iouThrs):
                 for dind, d in enumerate(dt):
                     # information about best match so far (m=-1 -> unmatched)
@@ -308,9 +315,10 @@ class COCOeval:
                     m   = -1
                     for gind, g in enumerate(gt):
                         # if this gt already matched, and not a crowd, continue
-                        if gtm[tind,gind]>0 and not iscrowd[gind]:
+                        if gtm[tind,gind]>=0 and not iscrowd[gind]:
                             continue
                         # if dt matched to reg gt, and on ignore gt, stop
+                        # since all the rest of g's are ignored as well because of the prior sorting
                         if m>-1 and gtIg[m]==0 and gtIg[gind]==1:
                             break
                         # continue to next gt unless better match made
@@ -319,7 +327,7 @@ class COCOeval:
                         # if match successful and best so far, store appropriately
                         iou=ious[dind,gind]
                         m=gind
-                    # if match made store id of match for both dt and gt
+                    # if match made store id of the match for both dt and gt
                     if m ==-1:
                         continue
                     dtIg[tind,dind] = gtIg[m]
@@ -404,8 +412,10 @@ class COCOeval:
                     npig = np.count_nonzero(gtIg==0 )
                     if npig == 0:
                         continue
-                    tps = np.logical_and(               dtm,  np.logical_not(dtIg) )
-                    fps = np.logical_and(np.logical_not(dtm), np.logical_not(dtIg) )
+                    #tps = np.logical_and(               dtm,  np.logical_not(dtIg) )
+                    #fps = np.logical_and(np.logical_not(dtm), np.logical_not(dtIg) )
+                    tps = np.logical_and(dtm >= 0,  np.logical_not(dtIg))
+                    fps = np.logical_and(dtm <  0,  np.logical_not(dtIg))
 
                     tp_sum = np.cumsum(tps, axis=1).astype(dtype=np.float)
                     fp_sum = np.cumsum(fps, axis=1).astype(dtype=np.float)
