@@ -102,7 +102,7 @@ class COCOeval:
             self.params.catIds = sorted(cocoGt.getCatIds())
 
 
-    def _prepare(self):
+    def _prepare(self, proposal_mode=False):
         '''
         Prepare ._gts and ._dts for evaluation based on params
         :return: None
@@ -127,6 +127,13 @@ class COCOeval:
             else:
                 gts=self.cocoGt.loadAnns(self.cocoGt.getAnnIds(imgIds=p.imgIds))
 
+        if proposal_mode:
+            # set up all the lables of gts and dts to 1
+            for dt in dts:
+                dt['category_id'] = 1
+            for gt in gts:
+                gt['category_id'] = 1
+
         # convert ground truth to mask if iouType == 'segm'
         if p.iouType == 'segm':
             _toMask(gts, self.cocoGt)
@@ -146,7 +153,7 @@ class COCOeval:
         self.evalImgs = defaultdict(list)   # per-image per-category evaluation results
         self.eval     = {}                  # accumulated evaluation results
 
-    def evaluate(self):
+    def evaluate(self, proposal_mode=False):
         '''
         Run per image evaluation on given images and store results (a list of dict) in self.evalImgs
         :return: None
@@ -165,7 +172,7 @@ class COCOeval:
         p.maxDets = sorted(p.maxDets)
         self.params=p
 
-        self._prepare()
+        self._prepare(proposal_mode)
         # loop through images, area range, max detection number
         catIds = p.catIds if p.useCats else [-1]
 
